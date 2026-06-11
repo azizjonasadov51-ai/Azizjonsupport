@@ -14,8 +14,8 @@ from aiogram.fsm.state import State, StatesGroup
 load_dotenv()
 
 # Configuration
-TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "7534509370"))
+TOKEN = os.getenv("TOKEN", "YOUR_BOT_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_CHAT_ID", "7534509370"))
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
