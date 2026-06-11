@@ -199,7 +199,8 @@ def get_services_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🛍️ Barcha Xizmatlar"), KeyboardButton(text="📋 Kategoriyalar")],
-            [KeyboardButton(text="❓ Qanday Tanlov?"), KeyboardButton(text="◀️ Orqaga")]
+            [KeyboardButton(text="❓ Qanday Tanlov?"), KeyboardButton(text="🌐 Sayt")],
+            [KeyboardButton(text="◀️ Orqaga")]
         ],
         resize_keyboard=True
     )
@@ -274,6 +275,8 @@ Azizjon Asadov quyidagi xizmatlarni taqdim etadi:
 
 🚀 <b>Loyihalar</b>
 🚀 MVP, Startup, SaaS Platformalar
+
+🌐 <b>Barcha Xizmatlar:</b> https://ai-solutions-app.netlify.app/
 
 📌 Quyidagi xizmatlardan birini tanlang yoki to'liq ro'yxatni ko'rish uchun "Barcha Xizmatlar" tugmasini bosing.
 """
@@ -389,6 +392,7 @@ async def admin_handler(message: Message):
 /unban 123456789 - Userni unlock qilish
 /keywords_list - Kalit suzlar ro'yxati
 /add_keyword - Yangi kalit suz qo'shish
+/reply [xabar] - Foydalanuvchiga javob yuborish (xabariga reply qilib)
 """
     await message.answer(admin_text, parse_mode='HTML')
 
@@ -488,6 +492,63 @@ async def broadcast_handler(message: Message):
         await message.answer(f"❌ Xatolik: {str(e)}")
 
 
+@dp.message(Command("reply"))
+async def reply_handler(message: Message):
+    """Admin replies to a user via /reply command used as a reply to a forwarded message"""
+    if message.from_user.id != ADMIN_ID:
+        return await message.answer("❌ Sizda bu buyruqni ishlatish huquqi yo'q.")
+
+    # Must be used as a reply to a forwarded user message
+    if not message.reply_to_message:
+        return await message.answer(
+            "❌ Foydalanish: Foydalanuvchi xabariga reply qiling va "
+            "/reply Xabaringiz matnini yozing"
+        )
+
+    # Extract reply text (everything after /reply)
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        return await message.answer(
+            "❌ Xabar matni kiritilmagan.\n"
+            "Misol: /reply Salom, sizning savolingizga javob..."
+        )
+
+    reply_text = parts[1].strip()
+
+    # Try to extract user ID from the forwarded message caption/text
+    replied_text = message.reply_to_message.text or message.reply_to_message.caption or ""
+    target_user_id = None
+
+    if "🆔 ID:" in replied_text:
+        try:
+            target_user_id = int(replied_text.split("🆔 ID:")[1].split("\n")[0].strip())
+        except (ValueError, IndexError):
+            pass
+
+    # Also check the inline code format used in some messages: <code>ID</code>
+    if target_user_id is None and "ID: " in replied_text:
+        try:
+            target_user_id = int(replied_text.split("ID: ")[1].split("\n")[0].strip())
+        except (ValueError, IndexError):
+            pass
+
+    if target_user_id is None:
+        return await message.answer(
+            "❌ Foydalanuvchi ID topilmadi.\n"
+            "Foydalanuvchining bot orqali yuborgan xabariga reply qiling."
+        )
+
+    try:
+        await bot.send_message(
+            target_user_id,
+            f"📩 <b>Admin javobi:</b>\n\n{reply_text}",
+            parse_mode='HTML'
+        )
+        await message.answer(f"✅ Xabar foydalanuvchi <code>{target_user_id}</code> ga yuborildi.", parse_mode='HTML')
+    except Exception as e:
+        await message.answer(f"❌ Xabar yuborishda xatolik: {str(e)}")
+
+
 @dp.message(Command("keywords_list"))
 async def keywords_list_handler(message: Message):
     """Show all keywords"""
@@ -535,7 +596,8 @@ async def home_handler(message: Message, state: FSMContext):
         admin_text += "/unban [ID] - Blokirovkani olib tashlash\n"
         admin_text += "/broadcast [xabar] - Hammasiga xabar jo'natish\n"
         admin_text += "/keywords_list - Kalit so'zlar ro'yxati\n"
-        admin_text += "/add_keyword - Kalit so'z qo'shish"
+        admin_text += "/add_keyword - Kalit so'z qo'shish\n"
+        admin_text += "/reply [xabar] - Foydalanuvchiga javob yuborish (xabariga reply qilib)"
         
         admin_keyboard = ReplyKeyboardMarkup(
             keyboard=[
@@ -544,6 +606,7 @@ async def home_handler(message: Message, state: FSMContext):
             ],
             resize_keyboard=True
         )
+
         await message.answer(admin_text, parse_mode='HTML', reply_markup=admin_keyboard)
         return
     
@@ -577,6 +640,29 @@ async def all_services_handler(message: Message, state: FSMContext):
     
     await message.answer(text, parse_mode='HTML', reply_markup=get_services_inline_keyboard())
     await state.set_state(MenuStates.service_selected)
+
+
+@dp.message(lambda m: m.text == "🌐 Sayt")
+async def website_handler(message: Message, state: FSMContext):
+    """Show website link"""
+    if message.from_user.id in banned_users:
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(
+                text="🌐 Saytga O'tish",
+                url="https://ai-solutions-app.netlify.app/"
+            )]
+        ]
+    )
+    await message.answer(
+        "🌐 <b>Barcha Xizmatlar Sayti</b>\n\n"
+        "To'liq xizmatlar katalogi va batafsil ma'lumot uchun rasmiy saytimizga tashrif buyuring:\n\n"
+        "🔗 https://ai-solutions-app.netlify.app/",
+        parse_mode='HTML',
+        reply_markup=keyboard
+    )
 
 
 @dp.callback_query(lambda c: c.data.startswith("service_"))
