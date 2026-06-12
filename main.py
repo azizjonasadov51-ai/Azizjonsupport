@@ -198,8 +198,7 @@ def get_services_keyboard():
     """Services menu keyboard"""
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🛍️ Barcha Xizmatlar"), KeyboardButton(text="📋 Kategoriyalar")],
-            [KeyboardButton(text="❓ Qanday Tanlov?"), KeyboardButton(text="🌐 Sayt")],
+            [KeyboardButton(text="🛍️ Barcha Xizmatlar"), KeyboardButton(text="🌐 Sayt")],
             [KeyboardButton(text="◀️ Orqaga")]
         ],
         resize_keyboard=True
@@ -392,7 +391,9 @@ async def admin_handler(message: Message):
 /unban 123456789 - Userni unlock qilish
 /keywords_list - Kalit suzlar ro'yxati
 /add_keyword - Yangi kalit suz qo'shish
-/reply [xabar] - Foydalanuvchiga javob yuborish (xabariga reply qilib)
+
+💡 <b>Foydalanuvchiga javob berish:</b>
+Foydalanuvchi xabariga reply qiling — bot avtomatik javobni yuboradi.
 """
     await message.answer(admin_text, parse_mode='HTML')
 
@@ -492,61 +493,7 @@ async def broadcast_handler(message: Message):
         await message.answer(f"❌ Xatolik: {str(e)}")
 
 
-@dp.message(Command("reply"))
-async def reply_handler(message: Message):
-    """Admin replies to a user via /reply command used as a reply to a forwarded message"""
-    if message.from_user.id != ADMIN_ID:
-        return await message.answer("❌ Sizda bu buyruqni ishlatish huquqi yo'q.")
 
-    # Must be used as a reply to a forwarded user message
-    if not message.reply_to_message:
-        return await message.answer(
-            "❌ Foydalanish: Foydalanuvchi xabariga reply qiling va "
-            "/reply Xabaringiz matnini yozing"
-        )
-
-    # Extract reply text (everything after /reply)
-    parts = message.text.split(maxsplit=1)
-    if len(parts) < 2 or not parts[1].strip():
-        return await message.answer(
-            "❌ Xabar matni kiritilmagan.\n"
-            "Misol: /reply Salom, sizning savolingizga javob..."
-        )
-
-    reply_text = parts[1].strip()
-
-    # Try to extract user ID from the forwarded message caption/text
-    replied_text = message.reply_to_message.text or message.reply_to_message.caption or ""
-    target_user_id = None
-
-    if "🆔 ID:" in replied_text:
-        try:
-            target_user_id = int(replied_text.split("🆔 ID:")[1].split("\n")[0].strip())
-        except (ValueError, IndexError):
-            pass
-
-    # Also check the inline code format used in some messages: <code>ID</code>
-    if target_user_id is None and "ID: " in replied_text:
-        try:
-            target_user_id = int(replied_text.split("ID: ")[1].split("\n")[0].strip())
-        except (ValueError, IndexError):
-            pass
-
-    if target_user_id is None:
-        return await message.answer(
-            "❌ Foydalanuvchi ID topilmadi.\n"
-            "Foydalanuvchining bot orqali yuborgan xabariga reply qiling."
-        )
-
-    try:
-        await bot.send_message(
-            target_user_id,
-            f"📩 <b>Admin javobi:</b>\n\n{reply_text}",
-            parse_mode='HTML'
-        )
-        await message.answer(f"✅ Xabar foydalanuvchi <code>{target_user_id}</code> ga yuborildi.", parse_mode='HTML')
-    except Exception as e:
-        await message.answer(f"❌ Xabar yuborishda xatolik: {str(e)}")
 
 
 @dp.message(Command("keywords_list"))
@@ -597,7 +544,8 @@ async def home_handler(message: Message, state: FSMContext):
         admin_text += "/broadcast [xabar] - Hammasiga xabar jo'natish\n"
         admin_text += "/keywords_list - Kalit so'zlar ro'yxati\n"
         admin_text += "/add_keyword - Kalit so'z qo'shish\n"
-        admin_text += "/reply [xabar] - Foydalanuvchiga javob yuborish (xabariga reply qilib)"
+        admin_text += "\n💡 <b>Foydalanuvchiga javob berish:</b>\n"
+        admin_text += "Foydalanuvchi xabariga reply qiling — bot avtomatik javobni yuboradi."
         
         admin_keyboard = ReplyKeyboardMarkup(
             keyboard=[
@@ -995,56 +943,73 @@ async def message_handler(message: Message):
     """Handle all other messages"""
     if message.from_user.id in banned_users:
         return
-    
-    # ADMIN SHOULDN'T RECEIVE OWN MESSAGES
-    if message.from_user.id == ADMIN_ID:
-        return
-    
-    user_id = message.from_user.id
-    users.add(user_id)
-    
-    # Update user data
-    if user_id in users_data:
-        users_data[user_id]['last_message'] = datetime.now().isoformat()
-    
+
     # ADMIN REPLY SYSTEM
-    if user_id == ADMIN_ID and message.reply_to_message:
-        replied_text = message.reply_to_message.text or ""
-        
+    # When admin replies to a forwarded user message, extract the user ID and
+    # forward the reply text back to that user automatically.
+    if message.from_user.id == ADMIN_ID and message.reply_to_message:
+        replied_text = (
+            message.reply_to_message.text
+            or message.reply_to_message.caption
+            or ""
+        )
+
+        target_user_id = None
         if "🆔 ID:" in replied_text:
             try:
-                user_id_reply = int(replied_text.split("🆔 ID: ")[1].split("\n")[0])
-                
+                target_user_id = int(
+                    replied_text.split("🆔 ID:")[1].split("\n")[0].strip()
+                )
+            except (ValueError, IndexError):
+                pass
+
+        if target_user_id is not None:
+            try:
                 if message.text:
                     await bot.send_message(
-                        user_id_reply,
-                        f"📩 Admin javobi:\n\n{message.text}",
+                        target_user_id,
+                        f"📩 <b>Admin javobi:</b>\n\n{message.text}",
                         parse_mode='HTML'
                     )
                 elif message.photo:
                     await bot.send_photo(
-                        user_id_reply,
+                        target_user_id,
                         photo=message.photo[-1].file_id,
-                        caption=message.caption or "📩 Admin javobi"
+                        caption=f"📩 <b>Admin javobi:</b>\n\n{message.caption or ''}",
+                        parse_mode='HTML'
                     )
                 elif message.video:
                     await bot.send_video(
-                        user_id_reply,
+                        target_user_id,
                         video=message.video.file_id,
-                        caption=message.caption or "📩 Admin javobi"
+                        caption=f"📩 <b>Admin javobi:</b>\n\n{message.caption or ''}",
+                        parse_mode='HTML'
                     )
                 elif message.document:
                     await bot.send_document(
-                        user_id_reply,
+                        target_user_id,
                         document=message.document.file_id,
-                        caption=message.caption or "📩 Admin javobi"
+                        caption=f"📩 <b>Admin javobi:</b>\n\n{message.caption or ''}",
+                        parse_mode='HTML'
                     )
-                
-                await message.reply("✅ Xabar foydalanuvchiga yuborildi.")
+                await message.reply(
+                    f"✅ Xabar foydalanuvchi <code>{target_user_id}</code> ga yuborildi.",
+                    parse_mode='HTML'
+                )
             except Exception as e:
                 await message.reply(f"❌ Xatolik: {str(e)}")
-        
         return
+
+    # ADMIN SHOULDN'T RECEIVE OWN MESSAGES (non-reply messages are ignored)
+    if message.from_user.id == ADMIN_ID:
+        return
+
+    user_id = message.from_user.id
+    users.add(user_id)
+
+    # Update user data
+    if user_id in users_data:
+        users_data[user_id]['last_message'] = datetime.now().isoformat()
     
     # CHECK KEYWORDS
     if message.text:
